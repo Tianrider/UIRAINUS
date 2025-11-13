@@ -20,6 +20,7 @@ API_KEYS = [
     "AIzaSyDOW6FjezvptFagOCb3bsOVMiJe5YO7Fr4",
     "AIzaSyCKa4j-7REu6gf6ODKHT311gBMdmmc4WFQ",
     "AIzaSyCytjGCxJnT5QmXfGYCwTq__UlcR4JYdtI",
+    "AIzaSyAs3boAtdcE4Rj6r_c3rkG030KnY-_yqEo",
     # Add more API keys here:
     # "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     # "AIzaSyYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
@@ -108,10 +109,11 @@ class PaperClassification(BaseModel):
 # GEMINI API CALLER WITH RETRY
 # ============================================================================
 
-def classify_paper_with_gemini(title: str, abstract: str, paper_id: str, retry_count=3):
+def classify_paper_with_gemini(title: str, abstract: str, paper_id: str):
     """
     Use Gemini to classify if paper discusses AI Ethics, Hallucination, or Bias
     Uses API key pool with rate limiting
+    Retries indefinitely with exponential backoff on API errors
     """
     # Handle missing abstract
     if not abstract or abstract == "No":
@@ -132,7 +134,10 @@ Return is_ethical=false if it's just general AI research, technical methods, or 
 List all applicable categories found. Provide your confidence level and brief reasoning.
 """
     
-    for attempt in range(retry_count):
+    attempt = 0
+    max_attempt = 500  # Virtual unlimited with very high number
+    
+    while attempt < max_attempt:
         # Get a client from the pool
         client, api_key, rate_limiter = api_pool.get_client_and_key()
         
@@ -141,7 +146,7 @@ List all applicable categories found. Provide your confidence level and brief re
         
         try:
             response = client.models.generate_content(
-                model="gemini-2.0-flash-lite",  # Lightest/fastest model
+                model="gemini-2.5-flash-lite",  # Lightest/fastest model
                 contents=prompt,
                 config={
                     "response_mime_type": "application/json",
@@ -169,31 +174,74 @@ List all applicable categories found. Provide your confidence level and brief re
             # Record failed call
             api_pool.record_call(api_key, success=False)
             
-            if attempt < retry_count - 1:
-                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                print(f"  ⚠️  Error for {paper_id[-12:]}, retry {attempt+1}/{retry_count} in {wait_time}s... ({str(e)[:40]})")
-                time.sleep(wait_time)
-            else:
-                print(f"  ❌ Failed after {retry_count} attempts: {paper_id[-12:]}")
-                return {
-                    'paper_id': paper_id,
-                    'is_ethical': False,
-                    'categories': '',
-                    'confidence': 'error',
-                    'reasoning': f'Error: {str(e)[:100]}',
-                    'success': False,
-                    'error': str(e),
-                    'api_key_used': 'error'
-                }
+            # Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (capped at 5 min)
+            wait_time = min(5 * (2 ** attempt), 300)
+            
+            attempt += 1
+            print(f"  ⚠️  Error for {paper_id[-12:]}, retry {attempt} in {wait_time}s... ({str(e)[:40]})")
+            time.sleep(wait_time)
+    
+    # This should never happen unless we hit the virtual limit
+    print(f"  ❌ Exceeded maximum retry attempts: {paper_id[-12:]}")
+    return {
+        'paper_id': paper_id,
+        'is_ethical': False,
+        'categories': '',
+        'confidence': 'error',
+        'reasoning': f'Exceeded maximum retries',
+        'success': False,
+        'error': 'Max retries exceeded',
+        'api_key_used': 'error'
+    }
 
 # ============================================================================
-# PARALLEL PROCESSING
+# LIVE CHECKPOINT WRITER
 # ============================================================================
 
-def process_papers_parallel(papers):
+class LiveCheckpointWriter:
+    """Thread-safe writer for live checkpointing of processed papers"""
+    def __init__(self, filename, resume_mode=False):
+        self.filename = filename
+        self.lock = threading.Lock()
+        self.fieldnames = None
+        self.file_initialized = False
+        self.resume_mode = resume_mode
+        
+        # If resuming, check if file exists and load its fieldnames
+        if resume_mode and os.path.exists(filename):
+            try:
+                with open(filename, 'r', encoding='utf-8') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    self.fieldnames = reader.fieldnames
+                    self.file_initialized = True
+                print(f"   ✓ Appending to existing checkpoint file")
+            except Exception as e:
+                print(f"   ⚠️  Could not read existing checkpoint: {e}")
+                self.resume_mode = False
+    
+    def write_row(self, row_dict):
+        """Write a single row to the CSV file"""
+        with self.lock:
+            # Initialize file on first write (only for new files)
+            if not self.file_initialized:
+                self.fieldnames = list(row_dict.keys())
+                with open(self.filename, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
+                    writer.writeheader()
+                self.file_initialized = True
+            
+            # Append row
+            with open(self.filename, 'a', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
+                writer.writerow(row_dict)
+
+
+
+def process_papers_parallel(papers, checkpoint_writer=None):
     """
     Process papers in parallel with Gemini API
     Uses all available API keys with proper rate limiting
+    Writes results live to checkpoint CSV if writer provided
     """
     results = []
     total = len(papers)
@@ -205,6 +253,8 @@ def process_papers_parallel(papers):
     print(f"Processing {total} papers")
     print(f"Workers: {max_workers} ({len(API_KEYS)} API key(s) × 3 workers each)")
     print(f"Estimated time: ~{(total * 4) / (len(API_KEYS) * 60):.1f} minutes")
+    if checkpoint_writer:
+        print(f"📊 Live checkpoint: {checkpoint_writer.filename}")
     print(f"{'='*70}\n")
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -234,6 +284,10 @@ def process_papers_parallel(papers):
                 result = {**paper, **classification}
                 results.append(result)
                 
+                # Write to checkpoint immediately
+                if checkpoint_writer:
+                    checkpoint_writer.write_row(result)
+                
                 if classification['is_ethical']:
                     ethical_count += 1
                     status = "✓ ETHICAL"
@@ -247,7 +301,7 @@ def process_papers_parallel(papers):
                 
             except Exception as e:
                 print(f"[{completed}/{total}] ❌ Exception: {str(e)[:50]}")
-                results.append({
+                error_result = {
                     **paper,
                     'is_ethical': False,
                     'categories': '',
@@ -255,7 +309,12 @@ def process_papers_parallel(papers):
                     'reasoning': f'Exception: {str(e)}',
                     'success': False,
                     'error': str(e)
-                })
+                }
+                results.append(error_result)
+                
+                # Write error result to checkpoint
+                if checkpoint_writer:
+                    checkpoint_writer.write_row(error_result)
     
     print(f"\n{'='*70}")
     print(f"✅ Processing complete!")
@@ -304,13 +363,42 @@ def find_latest_csv():
     """
     Find the most recent ui_ai_publications CSV file
     """
-    csv_files = glob.glob("ui_ai_publications_*.csv")
+    csv_files = glob.glob("./ui_ai_publications_*.csv")
     if not csv_files:
         raise FileNotFoundError("No ui_ai_publications_*.csv file found in current directory")
     
     # Get the most recent file
     latest_file = max(csv_files, key=os.path.getctime)
     return latest_file
+
+def find_latest_checkpoint():
+    """
+    Find the most recent checkpoint CSV file
+    """
+    checkpoint_files = glob.glob("./ui_ai_papers_checkpoint_*.csv")
+    if not checkpoint_files:
+        return None
+    
+    # Get the most recent checkpoint file
+    latest_checkpoint = max(checkpoint_files, key=os.path.getctime)
+    return latest_checkpoint
+
+def get_processed_paper_ids(checkpoint_file):
+    """
+    Extract paper IDs that have already been processed from checkpoint file
+    """
+    processed_ids = set()
+    try:
+        with open(checkpoint_file, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if 'openalex_id' in row:
+                    processed_ids.add(row['openalex_id'])
+    except Exception as e:
+        print(f"⚠️  Error reading checkpoint file: {e}")
+        return set()
+    
+    return processed_ids
 
 # ============================================================================
 # MAIN EXECUTION
@@ -335,24 +423,82 @@ def main():
         print("❌ No papers found in CSV!")
         return
     
-    # Process papers in parallel
+    # Check for existing checkpoint
+    existing_checkpoint = find_latest_checkpoint()
+    processed_ids = set()
+    resume_mode = False
+    checkpoint_file = None
+    
+    if existing_checkpoint:
+        print(f"\n🔍 Found existing checkpoint: {existing_checkpoint}")
+        processed_ids = get_processed_paper_ids(existing_checkpoint)
+        
+        if processed_ids:
+            remaining_papers = [p for p in papers if p.get('openalex_id') not in processed_ids]
+            print(f"✓ Already processed: {len(processed_ids)} papers")
+            print(f"⏳ Remaining to process: {len(remaining_papers)} papers")
+            
+            if len(remaining_papers) > 0:
+                # Ask user if they want to resume
+                print(f"\n📋 Resume from checkpoint?")
+                print(f"   YES: Continue from where you left off ({len(remaining_papers)} papers)")
+                print(f"   NO:  Start fresh with all {len(papers)} papers")
+                
+                user_input = input("\nResume? (Y/n): ").strip().lower()
+                
+                if user_input == '' or user_input == 'y' or user_input == 'yes':
+                    resume_mode = True
+                    papers = remaining_papers
+                    checkpoint_file = existing_checkpoint
+                    print(f"\n✅ Resuming from checkpoint!")
+                    print(f"   Using existing checkpoint: {checkpoint_file}\n")
+                else:
+                    print(f"\n🔄 Starting fresh...")
+            else:
+                print(f"\n✅ All papers already processed in checkpoint!")
+                print(f"   Loading results from: {existing_checkpoint}\n")
+                # Load and display results from checkpoint
+                classified_papers = read_csv(existing_checkpoint)
+                ethical_papers = [p for p in classified_papers if p.get('is_ethical', '').lower() == 'true']
+                
+                # Print summary and exit
+                print(f"\n{'='*70}")
+                print("SUMMARY (from checkpoint)")
+                print(f"{'='*70}")
+                print(f"Total papers processed: {len(classified_papers)}")
+                print(f"Ethical papers found: {len(ethical_papers)} ({len(ethical_papers)/len(classified_papers)*100:.1f}%)")
+                print(f"\n📊 Checkpoint file (all results): {existing_checkpoint}")
+                print(f"{'='*70}\n")
+                return
+    
+    # Create checkpoint file (new or resume existing)
+    if not resume_mode:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        checkpoint_file = f"ui_ai_papers_checkpoint_{timestamp}.csv"
+        print(f"📊 Checkpoint file: {checkpoint_file}")
+        print(f"   (Results will be saved live as they complete)\n")
+    
+    checkpoint_writer = LiveCheckpointWriter(checkpoint_file, resume_mode=resume_mode)
+    
+    # Process papers in parallel with live checkpointing
     start_time = time.time()
-    classified_papers = process_papers_parallel(papers)
+    classified_papers = process_papers_parallel(papers, checkpoint_writer)
     elapsed_time = time.time() - start_time
     
     # Print API key statistics
     api_pool.print_stats()
     
-    # Filter only ethical papers
-    ethical_papers = [p for p in classified_papers if p.get('is_ethical', False)]
+    # Load all results from checkpoint for complete summary
+    print(f"\n📊 Loading complete results from checkpoint...")
+    all_classified_papers = read_csv(checkpoint_file)
     
-    # Save all classified papers (with classification fields)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    all_results_file = f"ui_ai_papers_classified_{timestamp}.csv"
-    save_filtered_csv(classified_papers, all_results_file)
+    # Convert string 'True'/'False' to boolean for filtering
+    ethical_papers = [p for p in all_classified_papers if str(p.get('is_ethical', '')).lower() == 'true']
+    total_processed = len(all_classified_papers)
     
-    # Save only ethical papers
+    # Save only ethical papers (final summary file)
     if ethical_papers:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         ethical_only_file = f"ui_ai_papers_ethical_only_{timestamp}.csv"
         save_filtered_csv(ethical_papers, ethical_only_file)
     else:
@@ -362,10 +508,18 @@ def main():
     print(f"\n{'='*70}")
     print("SUMMARY")
     print(f"{'='*70}")
-    print(f"Total papers processed: {len(classified_papers)}")
-    print(f"Ethical papers found: {len(ethical_papers)} ({len(ethical_papers)/len(papers)*100:.1f}%)")
+    if resume_mode:
+        print(f"Total papers processed (all): {total_processed}")
+        print(f"Papers processed this session: {len(classified_papers)}")
+    else:
+        print(f"Total papers processed: {total_processed}")
+    print(f"Ethical papers found: {len(ethical_papers)} ({len(ethical_papers)/total_processed*100:.1f}%)")
     print(f"Processing time: {elapsed_time:.1f} seconds")
-    print(f"Average time per paper: {elapsed_time/len(papers):.2f} seconds")
+    if len(classified_papers) > 0:
+        print(f"Average time per paper: {elapsed_time/len(classified_papers):.2f} seconds")
+    print(f"\n📊 Checkpoint file (all results): {checkpoint_file}")
+    if ethical_papers:
+        print(f"✓ Ethical papers file: {ethical_only_file}")
     
     # Category breakdown
     if ethical_papers:
@@ -374,8 +528,8 @@ def main():
         for paper in ethical_papers:
             categories = paper.get('categories', '').split(', ')
             for cat in categories:
-                if cat:
-                    category_counts[cat] = category_counts.get(cat, 0) + 1
+                if cat and cat.strip():
+                    category_counts[cat.strip()] = category_counts.get(cat.strip(), 0) + 1
         
         for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
             print(f"   {category}: {count} papers")
@@ -383,7 +537,7 @@ def main():
         # Show top ethical papers
         print(f"\n🌟 Top 5 ethical papers by citations:")
         ethical_sorted = sorted(ethical_papers, 
-                               key=lambda x: int(x.get('cited_by_count', 0)), 
+                               key=lambda x: int(x.get('cited_by_count', 0) if x.get('cited_by_count', 0) else 0), 
                                reverse=True)
         for i, paper in enumerate(ethical_sorted[:5], 1):
             print(f"\n   {i}. {paper.get('title', 'N/A')}")

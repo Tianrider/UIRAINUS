@@ -3,13 +3,59 @@ import csv
 import time
 from datetime import datetime
 
-BASE_URL = "https://api.openalex.org/works"
-INSTITUTION_ID = "https://openalex.org/I29617571"  # University of Indonesia
-EMAIL = "your.email@example.com"  # Add your email for polite pool (10x faster)
+WORKS_URL = "https://api.openalex.org/works"
+INSTITUTIONS_URL = "https://api.openalex.org/institutions"
+EMAIL = "hadiwijayachristian7@gmail.com"  # Add your email for polite pool (10x faster)
 
-def fetch_all_ui_ai_papers():
+def search_institution(institution_name):
     """
-    Fetch ALL publications from University of Indonesia about AI or Artificial Intelligence
+    Search for institution by name and return matching results
+    """
+    print(f"\n🔍 Searching for institution: '{institution_name}'...")
+    
+    params = {
+        "search": institution_name,
+        "per-page": 10,
+        "mailto": EMAIL
+    }
+    
+    try:
+        response = requests.get(INSTITUTIONS_URL, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get("results", [])
+        
+        if not results:
+            print("❌ No institutions found!")
+            return None
+        
+        print(f"\n✅ Found {len(results)} institution(s)")
+        print("=" * 90)
+        
+        # Automatically use the first result
+        selected = results[0]
+        display_name = selected.get('display_name', 'N/A')
+        country = selected.get('country_code', 'N/A')
+        inst_type = selected.get('type', 'N/A')
+        works_count = selected.get('works_count', 0)
+        inst_id = selected.get('id', '')
+        
+        print(f"\n✅ Automatically selected first result:")
+        print(f"   Name: {display_name}")
+        print(f"   ID: {inst_id}")
+        print(f"   Country: {country} | Type: {inst_type} | Works: {works_count:,}")
+        print("=" * 90)
+        
+        return inst_id
+                
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error searching for institution: {e}")
+        return None
+
+def fetch_all_ui_ai_papers(institution_id):
+    """
+    Fetch ALL publications from specified institution about AI or Artificial Intelligence
     Uses pagination to get complete results
     """
     all_results = []
@@ -17,15 +63,15 @@ def fetch_all_ui_ai_papers():
     total_results = None
     
     print("=" * 70)
-    print("Fetching AI Publications from University of Indonesia")
+    print("Fetching AI Publications from Selected Institution")
     print("=" * 70)
     
     while True:
         # Build the exact query from your URL
         params = {
-            "filter": f"institutions.id:{INSTITUTION_ID}",
+            "filter": f"institutions.id:{institution_id}",
             "search": 'AI OR "Artificial Intelligence"',
-            "per-page": 100,
+            "per-page": 200,
             "page": page,
             "mailto": EMAIL
         }
@@ -33,7 +79,7 @@ def fetch_all_ui_ai_papers():
         print(f"\nFetching page {page}...", end=" ")
         
         try:
-            response = requests.get(BASE_URL, params=params, timeout=30)
+            response = requests.get(WORKS_URL, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
             
@@ -115,8 +161,10 @@ def save_to_csv(papers, filename="ui_ai_publications.csv"):
             institutions = set()
             for authorship in authorships:
                 for inst in authorship.get('institutions', []):
-                    institutions.add(inst.get('display_name', ''))
-            institutions_str = '; '.join(sorted(institutions))
+                    name = inst.get('display_name', '')
+                    if name:  # Only add non-empty names
+                        institutions.add(name)
+            institutions_str = '; '.join(sorted(institutions)) if institutions else ''
             
             # Extract topics
             topics = paper.get('topics', [])
@@ -191,12 +239,37 @@ def print_summary(papers):
         print(f"     DOI: {paper.get('doi', 'N/A')}")
 
 if __name__ == "__main__":
+    print("\n" + "█" * 70)
+    print("  OpenAlex Institution AI Publications Fetcher")
+    print("█" * 70)
+    
+    # Get institution name from user
+    institution_name = input("\n📝 Enter institution name to search: ").strip()
+    
+    if not institution_name:
+        print("❌ No institution name provided!")
+        exit(1)
+    
+    # Search for institution and get ID
+    institution_id = search_institution(institution_name)
+    
+    if not institution_id:
+        print("\n❌ No institution selected. Exiting...")
+        exit(1)
+    
     # Fetch all papers
-    papers = fetch_all_ui_ai_papers()
+    papers = fetch_all_ui_ai_papers(institution_id)
+    
+    if not papers:
+        print("\n⚠️  No papers found for this institution!")
+        exit(0)
     
     # Save to CSV
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"ui_ai_publications_{timestamp}.csv"
+    # Clean institution name for filename
+    clean_name = "".join(c if c.isalnum() or c == ' ' else '_' for c in institution_name)
+    clean_name = "_".join(clean_name.split()).lower()
+    filename = f"{clean_name}_ai_publications_{timestamp}.csv"
     save_to_csv(papers, filename)
     
     # Print summary

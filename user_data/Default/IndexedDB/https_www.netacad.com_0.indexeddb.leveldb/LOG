@@ -1,0 +1,14 @@
+2025/11/13-09:29:20.237 83ac Reusing MANIFEST C:\Uwiw Gaming\RPL\UIRAINUS\user_data\Default\IndexedDB\https_www.netacad.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/11/13-09:29:20.238 83ac Recovering log #10
+2025/11/13-09:29:20.238 83ac Reusing old log C:\Uwiw Gaming\RPL\UIRAINUS\user_data\Default\IndexedDB\https_www.netacad.com_0.indexeddb.leveldb/000010.log 
+2025/11/13-09:29:20.238 83ac Delete type=2 #8
+2025/11/13-09:29:25.134 83ac Level-0 table #15: started
+2025/11/13-09:29:25.150 83ac Level-0 table #15: 1664 bytes OK
+2025/11/13-09:29:25.152 83ac Delete type=0 #10
+2025/11/13-09:29:25.152 83ac Manual compaction at level-0 from '\x00\x04\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x05\x00\x00\x00' @ 0 : 0; will stop at '\x00\x04\x00\x00\xc8 \x00l\x00o\x00c\x00a\x00l\x00-\x00f\x00o\x00r\x00a\x00g\x00e\x00-\x00d\x00e\x00t\x00e\x00c\x00t\x00-\x00b\x00l\x00o\x00b\x00-\x00s\x00u\x00p\x00p\x00o\x00r\x00t' @ 3137 : 1
+2025/11/13-09:29:25.152 83ac Compacting 1@0 + 1@1 files
+2025/11/13-09:29:25.156 83ac Generated table #16@0: 1029 keys, 21307 bytes
+2025/11/13-09:29:25.156 83ac Compacted 1@0 + 1@1 files => 21307 bytes
+2025/11/13-09:29:25.157 83ac compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/11/13-09:29:25.157 83ac Delete type=2 #15
+2025/11/13-09:29:25.157 83ac Manual compaction at level-0 from '\x00\x04\x00\x00\xc8 \x00l\x00o\x00c\x00a\x00l\x00-\x00f\x00o\x00r\x00a\x00g\x00e\x00-\x00d\x00e\x00t\x00e\x00c\x00t\x00-\x00b\x00l\x00o\x00b\x00-\x00s\x00u\x00p\x00p\x00o\x00r\x00t' @ 3137 : 1 .. '\x00\x05\x00\x00\x00' @ 0 : 0; will stop at (end)
