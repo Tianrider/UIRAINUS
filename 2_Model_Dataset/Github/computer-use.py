@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from steel import Steel
 import asyncio
 import os
+import json
+import re
 
 load_dotenv()
 
@@ -20,7 +22,7 @@ async def find_university_policy(university_name: str):
         university_name (str): The name of the university to search models and datasets for
         
     Returns:
-        str: The final result containing found models and datasets or None if no results
+        dict: The final result as a structured JSON dictionary containing found models and datasets, or None if no results
     """
     # Initialize Steel client and session
     client = Steel(steel_api_key=os.getenv("STEEL_API_KEY"))
@@ -53,7 +55,7 @@ async def find_university_policy(university_name: str):
     IMPORTANT: Extract information directly from Google search results page without clicking into individual repositories!
     For each GitHub repository link visible in Google search results, immediately collect:
     - Repository name and owner (from the Google result snippet or URL)
-    - Full GitHub URL (from the Google search result link)
+    - Full GitHub URL (copy the complete https://github.com/owner/repo link directly from Google without opening the repository)
     - Repository description (shown in Google search snippet)
     - Any additional info visible in Google results (stars, language, etc.)
     
@@ -81,36 +83,60 @@ async def find_university_policy(university_name: str):
     STEP 6 - IMMEDIATE OUTPUT FOR MATCHING REPOSITORIES:
     As soon as you find GitHub repositories that match {university_name} and contain models/datasets:
     - Immediately add them to your results list
+    - Always include the exact full GitHub URL for every repository, even if you never open the repository page
     - Don't wait to open each one - use information from Google search results first
     - Build your results list progressively as you scroll through Google search results
     
     STEP 7 - FINAL OUTPUT:
-    Provide a structured summary with:
+    Provide the results in a structured JSON format. Your output MUST be valid JSON only:
     
-    🤖 FOUND MODELS:
-    - Model 1 Name: [repository name]
-      Owner: [owner/org]
-      URL: [GitHub URL]
-      Type: [inferred from description: LLM, vision model, NLP model, etc.]
-      Description: [from search results]
-      Stars: [number]
-      Last Updated: [date if available]
-      Language: [if visible]
-    
-    📊 FOUND DATASETS:
-    - Dataset 1 Name: [repository name]
-      Owner: [owner/org]
-      URL: [GitHub URL]
-      Type: [inferred from description: text, image, multimodal, etc.]
-      Description: [from search results]
-      Stars: [number]
-      Last Updated: [date if available]
-      Language: [if visible]
+    {{
+      "university": "{university_name}",
+      "models": [
+        {{
+          "name": "[repository name]",
+          "owner": "[owner/org]",
+          "url": "[GitHub URL]",
+          "type": "[inferred from description: LLM, vision model, NLP model, etc.]",
+          "description": "[from search results]",
+          "stars": "[number]",
+          "last_updated": "[date if available]",
+          "language": "[if visible]"
+        }}
+      ],
+      "datasets": [
+        {{
+          "name": "[repository name]",
+          "owner": "[owner/org]",
+          "url": "[GitHub URL]",
+          "type": "[inferred from description: text, image, multimodal, etc.]",
+          "description": "[from search results]",
+          "stars": "[number]",
+          "last_updated": "[date if available]",
+          "language": "[if visible]"
+        }}
+      ],
+      "search_info": {{
+        "queries_used": ["list of search queries attempted"],
+        "total_results": "[number]",
+        "status": "success" or "no_results_found"
+      }}
+    }}
     
     ⚠️ If NO models or datasets are found:
-    - State clearly that no models or datasets were found
-    - List what searches were attempted
-    - Suggest alternative search terms
+    {{
+      "university": "{university_name}",
+      "models": [],
+      "datasets": [],
+      "search_info": {{
+        "queries_used": ["list of search queries attempted"],
+        "total_results": 0,
+        "status": "no_results_found",
+        "suggestions": ["alternative search terms or suggestions"]
+      }}
+    }}
+    
+    IMPORTANT: Output ONLY valid JSON. Do not include any text before or after the JSON.
     
     CRITICAL EFFICIENCY INSTRUCTIONS:
     - DO NOT open each repository one by one - extract from Google search results page first!
@@ -124,7 +150,7 @@ async def find_university_policy(university_name: str):
     - Try multiple Google Dork queries to get comprehensive results
     - IF YOU FOUND A CAPTCHA, SOLVE IT AND CONTINUE THE SEARCH
 
-    !FINISH JOB AFTER COLLECTING INFORMATION FROM GOOGLE SEARCH RESULTS (aim for 5-10 repositories from Google search results pages)!
+    !FINISH JOB AFTER COLLECTING INFORMATION FROM GOOGLE SEARCH RESULTS!
 
     """
     
@@ -142,8 +168,24 @@ async def find_university_policy(university_name: str):
         
         final_result = history.final_result()
         if final_result:
-            print(final_result)
-            return final_result
+            # Try to extract and parse JSON from the result
+            try:
+                # Extract JSON from the result (handle cases where there might be extra text)
+                json_match = re.search(r'\{.*\}', final_result, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    parsed_json = json.loads(json_str)
+                    print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
+                    return parsed_json
+                else:
+                    # If no JSON found, try parsing the entire result
+                    parsed_json = json.loads(final_result)
+                    print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
+                    return parsed_json
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Warning: Could not parse JSON from result. Raw output:\n{final_result}")
+                print(f"JSON parsing error: {e}")
+                return {"raw_output": final_result, "parse_error": str(e)}
         else:
             print("No final result extracted. Check the agent's actions above.")
             return None
