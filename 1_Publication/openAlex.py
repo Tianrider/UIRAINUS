@@ -152,10 +152,18 @@ def save_to_csv(papers, filename="ui_ai_publications.csv"):
         writer.writeheader()
         
         for paper in papers:
-            # Extract authors
+            # Extract authors (handle None values)
             authorships = paper.get('authorships', [])
-            first_author = authorships[0]['author']['display_name'] if authorships else ''
-            all_authors = '; '.join([a['author']['display_name'] for a in authorships])
+            first_author = ''
+            if authorships and authorships[0].get('author'):
+                first_author = authorships[0]['author'].get('display_name', '') or ''
+            
+            # Extract all authors, filtering out None/empty values
+            author_names = []
+            for a in authorships:
+                if a.get('author') and a['author'].get('display_name'):
+                    author_names.append(a['author']['display_name'])
+            all_authors = '; '.join(author_names)
             
             # Extract institutions
             institutions = set()
@@ -166,13 +174,13 @@ def save_to_csv(papers, filename="ui_ai_publications.csv"):
                         institutions.add(name)
             institutions_str = '; '.join(sorted(institutions)) if institutions else ''
             
-            # Extract topics
+            # Extract topics (filter out None/empty values)
             topics = paper.get('topics', [])
-            topics_str = '; '.join([t.get('display_name', '') for t in topics])
+            topics_str = '; '.join([t.get('display_name', '') for t in topics if t.get('display_name')])
             
-            # Extract keywords
+            # Extract keywords (filter out None/empty values)
             keywords = paper.get('keywords', [])
-            keywords_str = '; '.join([k.get('display_name', '') for k in keywords])
+            keywords_str = '; '.join([k.get('display_name', '') for k in keywords if k.get('display_name')])
             
             # Primary location
             primary_location = paper.get('primary_location', {})
