@@ -1,0 +1,4 @@
+huggingface_hub>=0.15.0
+python-dotenv
+requests
+google-search-results
