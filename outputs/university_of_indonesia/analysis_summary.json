@@ -1,0 +1,12 @@
+{
+  "university": "University of Indonesia",
+  "timestamp": "2025-11-18T14:04:17.987394",
+  "output_directory": "C:\\Users\\ASUS\\Documents\\00. Kuliah\\Semester 5\\06. Rekaya Perangkat Lunak\\RAI Code\\UIRAINUS\\outputs\\university_of_indonesia",
+  "steps": {
+    "1_publications": true,
+    "2_models_datasets": true,
+    "3_policies": true,
+    "4_organigram": true
+  },
+  "duration_seconds": 1867.657798
+}
