@@ -1,0 +1,22 @@
+{
+  "university": "harvard university",
+  "timestamp": "2025-11-27T14:46:43.800959",
+  "output_directory": "c:\\Uwiw Gaming\\RPL\\UIRAINUS\\outputs\\harvard_university",
+  "steps": {
+    "1_publications": {
+      "total_found": 15909
+    },
+    "2_models_datasets": {
+      "total_model": 196,
+      "total_dataset": 2123
+    },
+    "3_policies": {
+      "total_found": 15,
+      "AI_rules_found": 5
+    },
+    "4_organigram": {
+      "total_entities_found": 2
+    }
+  },
+  "duration_seconds": 25603.001945
+}

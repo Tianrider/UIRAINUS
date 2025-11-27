@@ -104,7 +104,8 @@ async def find_university_policy(university_name: str):
         llm=llm,
         # browser_session=BrowserSession(cdp_url=cdp_url),
         use_vision=True,  # Enable vision to help with PDF reading
-        output_model_schema=PolicyResults
+        output_model_schema=PolicyResults,
+        browser={"headless": True}
     )
     
     try:

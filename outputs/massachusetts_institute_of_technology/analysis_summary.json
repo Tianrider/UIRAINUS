@@ -1,0 +1,21 @@
+{
+  "university": "Massachusetts Institute of Technology",
+  "timestamp": "2025-11-27T10:00:00",
+  "steps": {
+    "1_publications": {
+      "total_found": 3139
+    },
+    "2_models_datasets": {
+      "total_model": 196,
+      "total_dataset": 2123
+    },
+    "3_policies": {
+      "total_found": 15,
+      "AI_rules_found": 5
+    },
+    "4_organigram": {
+      "total_entities_found": 2
+    }
+  },
+  "status": "completed"
+}

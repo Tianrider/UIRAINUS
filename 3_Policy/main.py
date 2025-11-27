@@ -130,7 +130,7 @@ def create_csv_report(all_results, output_dir=None):
 async def main():    
     # List of universities to search
     universities = [
-        "University of Indonesia",
+        "Harvard University",
         # Add more universities here as needed
     ]
     
@@ -145,21 +145,35 @@ async def main():
         result = await find_university_policy(university)
         
         if result:
+            # Debug: print result type
+            print(f"\nDEBUG: Result type: {type(result)}")
+            if hasattr(result, '__dict__'):
+                print(f"DEBUG: Result attributes: {result.__dict__}")
+            
             # Parse result (handles both Pydantic models and JSON)
             parsed_data = parse_policy_result(result)
+            
+            # Debug: print parsed data
+            print(f"DEBUG: Parsed data type: {type(parsed_data)}")
+            if parsed_data:
+                print(f"DEBUG: First item type: {type(parsed_data[0])}")
+                print(f"DEBUG: First item content: {parsed_data[0]}")
             
             if parsed_data:
                 print(f"\n✓ Successfully found policy document(s) for {university}")
                 print(f"   Found {len(parsed_data)} document(s)")
                 all_results.extend(parsed_data)
                 
-                # Display found data
+                # Display found data - safely handle different types
                 for item in parsed_data:
-                    print(f"\n   Policy: {item.get('policy_title', 'N/A')}")
-                    print(f"   Type: {item.get('document_type', 'N/A')}")
-                    print(f"   Date: {item.get('publishing_date', 'N/A')}")
-                    print(f"   Department: {item.get('department', 'N/A')}")
-                    print(f"   URL: {item.get('url', 'N/A')}")
+                    if isinstance(item, dict):
+                        print(f"\n   Policy: {item.get('policy_title', 'N/A')}")
+                        print(f"   Type: {item.get('document_type', 'N/A')}")
+                        print(f"   Date: {item.get('publishing_date', 'N/A')}")
+                        print(f"   Department: {item.get('department', 'N/A')}")
+                        print(f"   URL: {item.get('url', 'N/A')}")
+                    else:
+                        print(f"\n   WARNING: Item is not a dict, type: {type(item)}, value: {item}")
             else:
                 print(f"\n⚠️ No policies found for {university}")
         else:

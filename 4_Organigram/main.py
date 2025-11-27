@@ -103,7 +103,7 @@ def create_csv_report(all_results, output_dir=None):
 async def main():    
     # List of universities to search
     universities = [
-        "University of Indonesia",
+        "Harvard University",
         # Add more universities here as needed
     ]
     

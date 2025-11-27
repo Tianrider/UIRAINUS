@@ -1,0 +1,5 @@
+keyword,repo,file,url,raw_url
+"extension:ipynb ""Massachusetts Institute of Technology"" in:file",mit-csail/ai-safety-dataset,data/safety_alignment.json,https://github.com/mit-csail/ai-safety-dataset/blob/main/data/safety_alignment.json,https://raw.githubusercontent.com/mit-csail/ai-safety-dataset/main/data/safety_alignment.json
+"extension:py ""MIT"" in:file",mit-han-lab/efficient-llm,models/quantization.py,https://github.com/mit-han-lab/efficient-llm/blob/master/models/quantization.py,https://raw.githubusercontent.com/mit-han-lab/efficient-llm/master/models/quantization.py
+"extension:csv ""MIT Media Lab"" in:file",mit-media-lab/affective-computing,datasets/emotion_recognition.csv,https://github.com/mit-media-lab/affective-computing/blob/main/datasets/emotion_recognition.csv,https://raw.githubusercontent.com/mit-media-lab/affective-computing/main/datasets/emotion_recognition.csv
+"extension:ipynb ""CSAIL"" in:file",mit-cml/robust-ai,notebooks/adversarial_training.ipynb,https://github.com/mit-cml/robust-ai/blob/main/notebooks/adversarial_training.ipynb,https://raw.githubusercontent.com/mit-cml/robust-ai/main/notebooks/adversarial_training.ipynb
